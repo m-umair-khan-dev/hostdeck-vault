@@ -23,3 +23,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# HostDeck Vault Local Data
+local_keys.json
+.dummy_keys.json

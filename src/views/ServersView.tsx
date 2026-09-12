@@ -346,12 +346,12 @@ export default function ServersView() {
                     {srv.username}@{srv.hostname}:{srv.port}
                   </TableCell>
                   <TableCell>
-                    {srv.key_name ? (
+                    {srv.key_name && (keys.some(k => k.name === srv.key_name) || srv.key_name.includes("/")) ? (
                       <span className="inline-flex items-center text-xs bg-secondary px-2 py-1 rounded-md">
                         <Key className="w-3 h-3 mr-1" /> Key
                       </span>
                     ) : (
-                      <span className="inline-flex items-center text-xs border px-2 py-1 rounded-md">
+                      <span className="inline-flex items-center text-xs border px-2 py-1 rounded-md" title={srv.key_name ? `Key '${srv.key_name}' missing locally` : ""}>
                         Password
                       </span>
                     )}

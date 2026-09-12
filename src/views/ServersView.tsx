@@ -151,7 +151,7 @@ export default function ServersView() {
     try {
       await invoke("delete_server", { host: hostAlias });
       toast.success(`Server ${hostAlias} deleted.`);
-      loadServers();
+      loadData();
     } catch (e: any) {
       toast.error(e.toString());
     }

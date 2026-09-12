@@ -15,12 +15,13 @@ export default function DashboardView() {
     async function loadStats() {
       try {
         const servers: any[] = await invoke("list_servers");
+        const keys: any[] = await invoke("list_keys");
         const isConnected: boolean = await invoke("check_git_connected");
-        // We haven't implemented list_jump_hosts or list_keys yet but we can mock or add them later
+        // We haven't implemented list_jump_hosts yet but we can mock or add them later
         setStats({
           servers: servers.length,
           jumpHosts: 0,
-          keys: 0,
+          keys: keys.length,
           gitConnected: isConnected,
         });
       } catch (e) {

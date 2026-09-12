@@ -42,7 +42,7 @@ export default function DashboardLayout() {
             </SidebarMenu>
           </SidebarContent>
           <SidebarFooter className="p-4 border-t text-xs text-muted-foreground text-center">
-            Antigravity v1.0
+            v0.1.5
           </SidebarFooter>
         </Sidebar>
 

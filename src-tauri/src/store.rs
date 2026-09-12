@@ -63,18 +63,38 @@ impl AppStore {
     }
 
     pub fn load(&mut self) -> Result<(), StoreError> {
+        let mut needs_migration_save = false;
+
         if self.global_path.exists() {
             let data_str = fs::read_to_string(&self.global_path)?;
             let data: GlobalData = serde_json::from_str(&data_str)?;
             self.servers = data.servers.into_iter().map(|s| (s.alias.clone(), s)).collect();
             self.jump_hosts = data.jump_hosts.into_iter().map(|j| (j.name.clone(), j)).collect();
             self.settings = data.settings;
+
+            // Migration: if local_keys.json doesn't exist yet, check if data.json still has 'keys'
+            if !self.local_path.exists() {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                    if let Some(keys_array) = value.get("keys").and_then(|k| k.as_array()) {
+                        if !keys_array.is_empty() {
+                            if let Ok(keys) = serde_json::from_value::<Vec<crate::models::SSHKey>>(value["keys"].clone()) {
+                                self.keys = keys.into_iter().map(|k| (k.name.clone(), k)).collect();
+                                needs_migration_save = true;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if self.local_path.exists() {
             let data_str = fs::read_to_string(&self.local_path)?;
             let data: LocalData = serde_json::from_str(&data_str)?;
             self.keys = data.keys.into_iter().map(|k| (k.name.clone(), k)).collect();
+        }
+        
+        if needs_migration_save {
+            let _ = self.save();
         }
         
         Ok(())

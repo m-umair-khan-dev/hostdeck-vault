@@ -17,19 +17,24 @@ pub enum StoreError {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-struct StoreData {
+struct GlobalData {
     #[serde(default)]
     servers: Vec<Server>,
     #[serde(default)]
     jump_hosts: Vec<JumpHost>,
     #[serde(default)]
-    keys: Vec<SSHKey>,
-    #[serde(default)]
     settings: Settings,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+struct LocalData {
+    #[serde(default)]
+    keys: Vec<SSHKey>,
+}
+
 pub struct AppStore {
-    pub path: PathBuf,
+    pub global_path: PathBuf,
+    pub local_path: PathBuf,
     pub servers: HashMap<String, Server>,
     pub jump_hosts: HashMap<String, JumpHost>,
     pub keys: HashMap<String, SSHKey>,
@@ -40,10 +45,14 @@ impl AppStore {
     pub fn new() -> Self {
         let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push(".ssh-bootstrap-manager");
-        path.push("data.json");
+        let mut global_path = path.clone();
+        global_path.push("data.json");
+        let mut local_path = path.clone();
+        local_path.push("local_keys.json");
         
         let mut store = AppStore {
-            path,
+            global_path,
+            local_path,
             servers: HashMap::new(),
             jump_hosts: HashMap::new(),
             keys: HashMap::new(),
@@ -54,22 +63,25 @@ impl AppStore {
     }
 
     pub fn load(&mut self) -> Result<(), StoreError> {
-        if !self.path.exists() {
-            return Ok(());
+        if self.global_path.exists() {
+            let data_str = fs::read_to_string(&self.global_path)?;
+            let data: GlobalData = serde_json::from_str(&data_str)?;
+            self.servers = data.servers.into_iter().map(|s| (s.alias.clone(), s)).collect();
+            self.jump_hosts = data.jump_hosts.into_iter().map(|j| (j.name.clone(), j)).collect();
+            self.settings = data.settings;
         }
-        let data_str = fs::read_to_string(&self.path)?;
-        let data: StoreData = serde_json::from_str(&data_str)?;
-        
-        self.servers = data.servers.into_iter().map(|s| (s.alias.clone(), s)).collect();
-        self.jump_hosts = data.jump_hosts.into_iter().map(|j| (j.name.clone(), j)).collect();
-        self.keys = data.keys.into_iter().map(|k| (k.name.clone(), k)).collect();
-        self.settings = data.settings;
+
+        if self.local_path.exists() {
+            let data_str = fs::read_to_string(&self.local_path)?;
+            let data: LocalData = serde_json::from_str(&data_str)?;
+            self.keys = data.keys.into_iter().map(|k| (k.name.clone(), k)).collect();
+        }
         
         Ok(())
     }
 
     pub fn save(&self) -> Result<(), StoreError> {
-        if let Some(parent) = self.path.parent() {
+        if let Some(parent) = self.global_path.parent() {
             fs::create_dir_all(parent)?;
         }
         
@@ -79,22 +91,24 @@ impl AppStore {
         let mut jump_hosts: Vec<JumpHost> = self.jump_hosts.values().cloned().collect();
         jump_hosts.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         
+        let global_data = GlobalData {
+            servers,
+            jump_hosts,
+            settings: self.settings.clone(),
+        };
+        let global_data_str = serde_json::to_string_pretty(&global_data)?;
+        let tmp_global = self.global_path.with_extension("json.tmp");
+        fs::write(&tmp_global, global_data_str)?;
+        fs::rename(&tmp_global, &self.global_path)?;
+        
         let mut keys: Vec<SSHKey> = self.keys.values().cloned().collect();
         keys.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         
-        let data = StoreData {
-            servers,
-            jump_hosts,
-            keys,
-            settings: self.settings.clone(),
-        };
-        
-        let data_str = serde_json::to_string_pretty(&data)?;
-        
-        // For atomic write, we write to a temporary file in the same directory and rename
-        let tmp_path = self.path.with_extension("json.tmp");
-        fs::write(&tmp_path, data_str)?;
-        fs::rename(&tmp_path, &self.path)?;
+        let local_data = LocalData { keys };
+        let local_data_str = serde_json::to_string_pretty(&local_data)?;
+        let tmp_local = self.local_path.with_extension("json.tmp");
+        fs::write(&tmp_local, local_data_str)?;
+        fs::rename(&tmp_local, &self.local_path)?;
         
         Ok(())
     }
@@ -124,11 +138,9 @@ impl AppStore {
                 return Err(StoreError::Validation(format!("Jump Host '{}' does not exist.", jh)));
             }
         }
-        if let Some(ref k) = server.key_name {
-            if !self.keys.contains_key(k) {
-                return Err(StoreError::Validation(format!("SSH Key '{}' does not exist.", k)));
-            }
-        }
+        // NOTE: We deliberately do NOT validate if server.key_name exists in self.keys.
+        // Because keys are local to the hardware, a synced server might reference a key that was created on another machine.
+        // The UI handles falling back to password mode if the key doesn't exist locally.
         Ok(())
     }
 

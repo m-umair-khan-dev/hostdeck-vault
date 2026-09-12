@@ -109,16 +109,21 @@ pub fn push_changes(store: &mut AppStore, commit_message: &str) -> Result<bool, 
     
     // Copy current state to the repo
     let config_dest = path.join(REPO_CONFIG_FILENAME);
-    let original_path = store.path.clone();
+    let original_path = store.global_path.clone();
     
-    // We hackily modify the path temporarily to save to the repo, then restore it
+    // We hackily modify the global path temporarily to save to the repo, then restore it
     let mut repo_store = AppStore::new();
-    repo_store.path = config_dest.clone();
+    repo_store.global_path = config_dest.clone();
     repo_store.servers = store.servers.clone();
     repo_store.jump_hosts = store.jump_hosts.clone();
-    repo_store.keys = store.keys.clone();
+    repo_store.keys = store.keys.clone(); // Kept for safety, but they won't be synced because local_path isn't in Git repo
     repo_store.settings = store.settings.clone();
+    
+    // Temporarily point local_path to a dummy location so we don't accidentally overwrite the user's real keys during repo_store.save()
+    repo_store.local_path = path.join(".dummy_keys.json");
+    
     repo_store.save()?;
+    let _ = fs::remove_file(repo_store.local_path); // Delete the dummy keys file from the git repo folder just to be clean
     
     let mut index = repo.index()?;
     index.add_path(Path::new(REPO_CONFIG_FILENAME))?;

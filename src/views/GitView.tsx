@@ -54,7 +54,7 @@ export default function GitView() {
   const handlePush = async () => {
     setIsLoading(true);
     try {
-      await invoke("git_push");
+      await invoke("git_push", { commitMessage: "Auto-sync from HostDeck Vault" });
       toast.success("Changes pushed to Git successfully.");
     } catch (e: any) {
       toast.error(e.toString());
